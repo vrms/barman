@@ -26,6 +26,7 @@ from barman.config import (
     BackupOptions,
     Config,
     RecoveryOptions,
+    parse_si_suffix,
     parse_slot_name,
     parse_time_interval,
 )
@@ -73,6 +74,8 @@ reuse_backup = link
 retention_policy = redundancy 3
 wal_retention_policy = base
 last_backup_maximum_age = '1 day'
+last_backup_minimum_size = '1 Mi'
+last_wal_maximum_age = '1 hour'
 [web]
 active = true
 archiver = on
@@ -81,6 +84,8 @@ ssh_command = ssh -I ~/.ssh/web01_rsa -c arcfour -p 22 postgres@web01
 conninfo = host=web01 user=postgres port=5432
 compression =
 last_backup_maximum_age = '1 day'
+last_backup_minimum_size = '1 Mi'
+last_wal_maximum_age = '1 hour'
 """
 
 
@@ -128,6 +133,8 @@ class TestConfig(object):
                 "config": main.config,
                 "compression": "gzip",
                 "last_backup_maximum_age": timedelta(1),
+                "last_backup_minimum_size": 1048576,
+                "last_wal_maximum_age": timedelta(hours=1),
                 "retention_policy": "redundancy 3",
                 "reuse_backup": "link",
                 "description": "Main PostgreSQL Database",
@@ -159,6 +166,8 @@ class TestConfig(object):
                 "wals_directory": "/some/barman/home/web/wals",
                 "wal_retention_policy": "base",
                 "last_backup_maximum_age": timedelta(1),
+                "last_backup_minimum_size": 1048576,
+                "last_wal_maximum_age": timedelta(hours=1),
                 "ssh_command": "ssh -I ~/.ssh/web01_rsa -c arcfour "
                 "-p 22 postgres@web01",
                 "streaming_conninfo": "host=web01 user=postgres port=5432",
@@ -196,6 +205,9 @@ class TestConfig(object):
         basic test the parsing method for timedelta values
         pass a value, check if is correctly transformed in a timedelta
         """
+        # 6 hours
+        val = parse_time_interval("6 hours")
+        assert val == timedelta(hours=6)
         # 1 day
         val = parse_time_interval("1 day")
         assert val == timedelta(days=1)
@@ -282,6 +294,34 @@ class TestConfig(object):
             }
         )
         assert main.__dict__ == expected
+
+    def test_parse_si_suffix(self):
+        """
+        basic test the parsing method for timedelta values
+        pass a value, check if is correctly transformed in a timedelta
+        """
+        # A simple integer is accetpable
+        val = parse_si_suffix("12345678")
+        assert val == 12345678
+        # 2 k -> 2000
+        val = parse_si_suffix("2 k")
+        assert val == 2000
+        # 3Ki -> 3072
+        val = parse_si_suffix("3Ki")
+        assert val == 3072
+        # 52M -> 52000000
+        val = parse_si_suffix("52M")
+        assert val == 52000000
+        # 13Gi
+        val = parse_si_suffix("13Gi")
+        assert val == 13958643712
+        # 99 Ti
+        val = parse_si_suffix("99 Ti")
+        assert val == 108851651149824
+        # this string is something that the regexp cannot manage,
+        # so we expect a ValueError exception
+        with pytest.raises(ValueError):
+            parse_si_suffix("12 bunnies")
 
     def test_server_conflict_paths(self):
         """
