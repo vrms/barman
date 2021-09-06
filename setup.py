@@ -97,6 +97,7 @@ setup(
         "cloud": ["boto3"],
         "completion": ["argcomplete"],
         "azure": ["azure-identity", "azure-storage-blob"],
+        "google": ["google-cloud-storage"],
     },
     platforms=["Linux", "Mac OS X"],
     classifiers=[
