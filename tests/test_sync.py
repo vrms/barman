@@ -31,7 +31,7 @@ from barman.exceptions import (
     SyncNothingToDo,
     SyncToBeDeleted,
 )
-from barman.infofile import BackupInfo, LocalBackupInfo
+from barman.infofile import BackupInfo, LocalBackupInfo, WalFileInfo
 from barman.lockfile import LockFileBusy
 from testing_helpers import (
     build_config_from_dicts,
@@ -77,7 +77,7 @@ EXPECTED_MINIMAL = {
     },
     "config": {},
     "last_name": "000000010000000000000005",
-    "last_position": 209,
+    "last_position": 5,
     "wals": [
         {
             "time": 1406019026.0,
@@ -126,46 +126,53 @@ class TestSync(object):
 
         :param path tmpdir: py.test temporary directory unique to the test
         """
-        # build a test xlog.db
-        tmp_path = tmpdir.join("xlog.db")
-        tmp_path.write(
-            "000000010000000000000002\t16777216\t1406019026.0\tNone\n"
-            "000000010000000000000003\t16777216\t1406019026.0\tNone\n"
-            "000000010000000000000004\t16777216\t1406019329.93\tNone\n"
+        barman_home = tmpdir.mkdir("barman_home")
+        server = build_real_server(
+            global_conf=dict(barman_home=str(barman_home)),
+            main_conf=dict(
+                wals_directory=str(tmpdir.mkdir("wals")),
+            ),
         )
-        tmp_file = tmp_path.open()
+        # Access storage metadata without the contextmanager
+        metadata = server._metadata
 
-        tmp_file.seek(0)
-        server = build_real_server()
+        # build a test xlog.db
+        metadata.write_wal_infos(
+            [
+                WalFileInfo.from_xlogdb_line(w)
+                for w in [
+                    "000000010000000000000002\t16777216\t1406019026.0\tNone\n",
+                    "000000010000000000000003\t16777216\t1406019026.0\tNone\n",
+                    "000000010000000000000004\t16777216\t1406019329.93\tNone\n",
+                ]
+            ]
+        )
+
         # No last_position parameter, only last_wal.
         # Expect the method to set the read point to 0 (beginning of the file)
         result = server.set_sync_starting_point(
-            tmp_file, "000000010000000000000002", None
+            metadata, "000000010000000000000002", None
         )
         assert result == 0
-        assert tmp_file.tell() == 0
+        assert metadata.current_position == 0
 
         # last_position parameter and the correct last_wal
         # Expect the method to set the read point to the given last_position
-        result = server.set_sync_starting_point(
-            tmp_file, "000000010000000000000003", 52
-        )
-        assert result == 52
-        assert tmp_file.tell() == 52
+        result = server.set_sync_starting_point(metadata, "000000010000000000000003", 1)
+        assert result == 1
+        assert metadata.current_position == 1
 
         # No last_position and no last_wal.
         # Expect the method to set the read point to 0
-        result = server.set_sync_starting_point(tmp_file, None, None)
+        result = server.set_sync_starting_point(metadata, None, None)
         assert result == 0
-        assert tmp_file.tell() == 0
+        assert metadata.current_position == 0
 
         # Wrong combination of last_position and last_wal.
         # Expect the method to set the read point to 0
-        result = server.set_sync_starting_point(
-            tmp_file, "000000010000000000000004", 52
-        )
+        result = server.set_sync_starting_point(metadata, "000000010000000000000004", 1)
         assert result == 0
-        assert tmp_file.tell() == 0
+        assert metadata.current_position == 0
 
     def test_status(self, capsys, tmpdir):
         """
@@ -177,19 +184,13 @@ class TestSync(object):
         :param path tmpdir: py.test temporary directory unique to the test
         :param capsys: fixture that allow to access stdout/stderr output
         """
-        # Create a test xlog.db
-        tmp_path = tmpdir.join("xlog.db")
-        tmp_path.write(
-            "000000010000000000000001\t16777216\t1406019022.4\tNone\n"
-            "000000010000000000000002\t16777216\t1406019026.0\tNone\n"
-            "000000010000000000000003\t16777216\t1406019026.0\tNone\n"
-            "000000010000000000000004\t16777216\t1406019329.93\tNone\n"
-            "000000010000000000000005\t16777216\t1406019330.84\tNone\n"
+        barman_home = tmpdir.mkdir("barman_home")
+        server = build_real_server(
+            global_conf=dict(barman_home=str(barman_home)),
+            main_conf=dict(
+                wals_directory=str(tmpdir.mkdir("wals")),
+            ),
         )
-
-        # Build a server, replacing some function to use the the tmpdir objects
-        server = build_real_server()
-        server.xlogdb = lambda: tmp_path.open()
         server.get_available_backups = lambda: {
             "1234567890": build_test_backup_info(
                 server=server,
@@ -197,6 +198,30 @@ class TestSync(object):
                 end_time=dateutil.parser.parse("Wed Jul 23 12:00:43 2014"),
             )
         }
+
+        # Access storage metadata without the contextmanager
+        metadata = server._metadata
+
+        # Test with an empty storage metadata
+        server.sync_status("000000010000000000000001")
+        (out, err) = capsys.readouterr()
+        result = json.loads(out)
+        assert result["last_position"] == 0
+        assert result["last_name"] == ""
+
+        # Write some WAL data for remainder of test
+        metadata.write_wal_infos(
+            [
+                WalFileInfo.from_xlogdb_line(w)
+                for w in [
+                    "000000010000000000000001\t16777216\t1406019022.4\tNone\n",
+                    "000000010000000000000002\t16777216\t1406019026.0\tNone\n",
+                    "000000010000000000000003\t16777216\t1406019026.0\tNone\n",
+                    "000000010000000000000004\t16777216\t1406019329.93\tNone\n",
+                    "000000010000000000000005\t16777216\t1406019330.84\tNone\n",
+                ]
+            ]
+        )
 
         # Call the status method capturing the output using capsys
         server.sync_status(None, None)
@@ -221,14 +246,6 @@ class TestSync(object):
         # if last_wal is newer than the last entry of the xlog.db
         with pytest.raises(SyncError):
             server.sync_status("000000010000000000000007")
-
-        # test with an empty file
-        tmp_path.write("")
-        server.sync_status("000000010000000000000001")
-        (out, err) = capsys.readouterr()
-        result = json.loads(out)
-        assert result["last_position"] == 0
-        assert result["last_name"] == ""
 
     def test_check_sync_required(self):
         """
@@ -586,9 +603,9 @@ class TestSync(object):
             "000000010000000000000004\t16777216\t1406019329.93\tNone\n",
             "000000010000000000000005\t16777216\t1406019330.84\tNone\n",
         ]
-        with server.xlogdb() as fxlogdb:
-            xlog = fxlogdb.readlines()
-            assert xlog == exp_xlog
+        with server.metadata() as metadata:
+            for i, wal_info in enumerate(metadata.get_wal_infos()):
+                assert wal_info.to_xlogdb_line() == exp_xlog[i]
 
     def _create_mock_config(self, tmpdir):
         """Helper for passive node tests which returns a mock config object"""

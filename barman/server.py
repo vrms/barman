@@ -90,6 +90,8 @@ from barman.utils import (
 )
 from barman.wal_archiver import FileWalArchiver, StreamingWalArchiver, WalArchiver
 
+from barman.storage.metadata import storage_metadata_factory
+
 PARTIAL_EXTENSION = ".partial"
 PRIMARY_INFO_FILE = "primary.info"
 SYNC_WALS_INFO_FILE = "sync-wals.info"
@@ -233,6 +235,9 @@ class Server(RemoteStatusMixin):
         """
         super(Server, self).__init__()
         self.config = config
+        self._metadata = storage_metadata_factory(
+            self.config.name, self.config.wals_directory
+        )
         self.path = self._build_path(self.config.path_prefix)
         self.process_manager = ProcessManager(self.config)
 
@@ -611,11 +616,10 @@ class Server(RemoteStatusMixin):
         # Make sure that WAL archiving has been setup
         # XLOG_DB needs to exist and its size must be > 0
         # NOTE: we do not need to acquire a lock in this phase
-        xlogdb_empty = True
-        if os.path.exists(self.xlogdb_file_name):
-            with open(self.xlogdb_file_name, "rb") as fxlogdb:
-                if os.fstat(fxlogdb.fileno()).st_size > 0:
-                    xlogdb_empty = False
+        metadata = storage_metadata_factory(
+            self.config.name, self.config.wals_directory
+        )
+        xlogdb_empty = not metadata.has_content()
 
         # NOTE: This check needs to be only visible if it fails
         if xlogdb_empty:
@@ -1448,9 +1452,9 @@ class Server(RemoteStatusMixin):
         # of the backup
         if not target_tli:
             target_tli, _, _ = xlog.decode_segment_name(end)
-        with self.xlogdb() as fxlogdb:
-            for line in fxlogdb:
-                wal_info = WalFileInfo.from_xlogdb_line(line)
+        with self.metadata() as metadata:
+            wal_infos = metadata.get_wal_infos()
+            for wal_info in wal_infos:
                 # Handle .history files: add all of them to the output,
                 # regardless of their age
                 if xlog.is_history_file(wal_info.name):
@@ -1467,8 +1471,7 @@ class Server(RemoteStatusMixin):
                     if target_time and wal_info.time > target_time:
                         break
             # return all the remaining history files
-            for line in fxlogdb:
-                wal_info = WalFileInfo.from_xlogdb_line(line)
+            for wal_info in wal_infos:
                 if xlog.is_history_file(wal_info.name):
                     yield wal_info
 
@@ -1488,9 +1491,9 @@ class Server(RemoteStatusMixin):
             next_end = self.get_next_backup(backup.backup_id).end_wal
         backup_tli, _, _ = xlog.decode_segment_name(begin)
 
-        with self.xlogdb() as fxlogdb:
-            for line in fxlogdb:
-                wal_info = WalFileInfo.from_xlogdb_line(line)
+        with self.metadata() as metadata:
+            wal_infos = metadata.get_wal_infos()
+            for wal_info in wal_infos:
                 # Handle .history files: add all of them to the output,
                 # regardless of their age, if requested (the 'include_history'
                 # parameter is True)
@@ -2484,6 +2487,11 @@ class Server(RemoteStatusMixin):
         return os.path.join(self.config.wals_directory, self.XLOG_DB)
 
     @contextmanager
+    def metadata(self):
+        with ServerXLOGDBLock(self.config.barman_lock_directory, self.config.name):
+            yield self._metadata
+
+    @contextmanager
     def xlogdb(self, mode="r"):
         """
         Context manager to access the xlogdb file.
@@ -2940,18 +2948,15 @@ class Server(RemoteStatusMixin):
         if backups:
             first_useful_wal = backups[sorted(backups.keys())[0]].begin_wal
         # Read xlogdb file.
-        with self.xlogdb() as fxlogdb:
+        with self.metadata() as metadata:
             starting_point = self.set_sync_starting_point(
-                fxlogdb, last_wal, last_position
+                metadata, last_wal, last_position
             )
             check_first_wal = starting_point == 0 and last_wal is not None
             # The wal_info and line variables are used after the loop.
             # We initialize them here to avoid errors with an empty xlogdb.
-            line = None
             wal_info = None
-            for line in fxlogdb:
-                # Parse the line
-                wal_info = WalFileInfo.from_xlogdb_line(line)
+            for wal_info in metadata.get_wal_infos(last_position):
                 # Check if user is requesting data that is not available.
                 # TODO: probably the check should be something like
                 # TODO: last_wal + 1 < wal_info.name
@@ -2980,7 +2985,10 @@ class Server(RemoteStatusMixin):
                     )
                 # Set last_position with the current position - len(last_line)
                 # (returning the beginning of the last line)
-                sync_status["last_position"] = fxlogdb.tell() - len(line)
+                # TODO this is not good and needs re-thinking - likely move all
+                # this logic into the xlog metadata class so nothing outside has
+                # to care?
+                sync_status["last_position"] = metadata.current_position
                 # Set the name of the last wal of the file
                 sync_status["last_name"] = wal_info.name
             else:
@@ -3686,9 +3694,8 @@ class Server(RemoteStatusMixin):
 
                     # If everything is synced without errors,
                     # update xlog.db using the list of WalFileInfo object
-                    with self.xlogdb("a") as fxlogdb:
-                        for wal_info in local_wals:
-                            fxlogdb.write(wal_info.to_xlogdb_line())
+                    with self.metadata() as metadata:
+                        metadata.write_wal_infos(local_wals)
                     # We need to update the sync-wals.info file with the latest
                     # synchronised WAL and the latest read position.
                     self.write_sync_wals_info_file(primary_info)
@@ -3720,7 +3727,7 @@ class Server(RemoteStatusMixin):
             )
 
     @staticmethod
-    def set_sync_starting_point(xlogdb_file, last_wal, last_position):
+    def set_sync_starting_point(metadata, last_wal, last_position):
         """
         Check if the xlog.db file has changed between two requests
         from the client and set the start point for reading the file
@@ -3732,17 +3739,14 @@ class Server(RemoteStatusMixin):
         """
         # If last_position is None start reading from the beginning of the file
         position = int(last_position) if last_position is not None else 0
-        # Seek to required position
-        xlogdb_file.seek(position)
-        # Read 24 char (the size of a wal name)
-        wal_name = xlogdb_file.read(24)
+        # Get WAL at required position
+        wal_info = metadata.get_wal_info_at(position)
         # If the WAL name is the requested one start from last_position
-        if wal_name == last_wal:
-            # Return to the line start
-            xlogdb_file.seek(position)
+        if wal_info and wal_info.name == last_wal:
+            # Return the position
             return position
         # If the file has been truncated, start over
-        xlogdb_file.seek(0)
+        metadata.current_position = 0
         return 0
 
     def write_sync_wals_info_file(self, primary_info):

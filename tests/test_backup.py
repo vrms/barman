@@ -31,8 +31,9 @@ import barman.utils
 from barman.annotations import KeepManager
 from barman.config import BackupOptions
 from barman.exceptions import CompressionIncompatibility, RecoveryInvalidTargetException
-from barman.infofile import BackupInfo
+from barman.infofile import BackupInfo, WalFileInfo
 from barman.retention_policies import RetentionPolicyFactory
+from barman.storage.metadata import storage_metadata_factory
 from testing_helpers import (
     build_backup_directories,
     build_backup_manager,
@@ -191,6 +192,7 @@ class TestBackup(object):
         backup_manager = build_backup_manager()
         backup_manager.server.config.name = "TestServer"
         backup_manager.server.config.barman_lock_directory = tmpdir.strpath
+        backup_manager.server.config.wals_directory = tmpdir.strpath
         backup_manager.server.config.backup_options = []
 
         # Create a fake backup directory inside tmpdir (old format)
@@ -209,16 +211,21 @@ class TestBackup(object):
         wal_history_file04.write("2\t0/3000028\tunknown\n")
         wal_file = wal_dir.join("0000000100000000/000000010000000000000001")
         wal_file.ensure()
-        xlog_db = wal_dir.join("xlog.db")
-        xlog_db.write(
-            "000000010000000000000001\t42\t43\tNone\n"
-            "00000002.history\t42\t43\tNone\n"
-            "00000003.history\t42\t43\tNone\n"
-            "00000004.history\t42\t43\tNone\n"
+        metadata = storage_metadata_factory(
+            backup_manager.server.config.name,
+            backup_manager.server.config.wals_directory,
         )
-        backup_manager.server.xlogdb.return_value.__enter__.return_value = xlog_db.open(
-            mode="r+"
+        metadata.write_wal_infos(
+            [
+                WalFileInfo.from_xlogdb_line(
+                    "000000010000000000000001\t42\t43\tNone\n"
+                ),
+                WalFileInfo.from_xlogdb_line("00000002.history\t42\t43\tNone\n"),
+                WalFileInfo.from_xlogdb_line("00000003.history\t42\t43\tNone\n"),
+                WalFileInfo.from_xlogdb_line("00000004.history\t42\t43\tNone\n"),
+            ]
         )
+        backup_manager.server.metadata.return_value.__enter__.return_value = metadata
         backup_manager.server.config.basebackups_directory = base_dir.strpath
         backup_manager.server.config.wals_directory = wal_dir.strpath
         # The following tablespaces are defined in the default backup info
@@ -756,14 +763,18 @@ class TestWalCleanup(object):
         backup_manager.server.config.basebackups_directory = base_dir.strpath
         backup_manager.server.config.wals_directory = wal_dir.strpath
         backup_manager.server.config.minimum_redundancy = 1
-        self.xlog_db = wal_dir.join("xlog.db")
-        self.xlog_db.write("")
-
-        def open_xlog_db():
-            return open(self.xlog_db.strpath, "r+")
+        self.metadata = storage_metadata_factory(
+            backup_manager.server.config.name,
+            backup_manager.server.config.wals_directory,
+        )
+        self.metadata.write_wal_infos(
+            [WalFileInfo.from_xlogdb_line("000000010000000000000001\t42\t43\tNone\n")]
+        )
 
         # This must be a side-effect so we open xlog_db each time it is called
-        backup_manager.server.xlogdb.return_value.__enter__.side_effect = open_xlog_db
+        backup_manager.server.metadata.return_value.__enter__.return_value = (
+            self.metadata
+        )
 
         # Wire get_available_backups in our mock server to call
         # backup_manager.get_available_backups, just like a non-mock server
@@ -804,7 +815,9 @@ class TestWalCleanup(object):
         with open("%s/%s" % (wal_path, wal), "a"):
             # An empty file is fine for the purposes of these tests
             pass
-        self.xlog_db.write("%s\t42\t43\tNone\n" % wal, mode="a")
+        self.metadata.write_wal_infos(
+            [WalFileInfo.from_xlogdb_line("%s\t42\t43\tNone\n" % wal)]
+        )
 
     def _create_wals_on_filesystem(self, wals_directory, begin_wal, end_wal):
         """
@@ -955,7 +968,9 @@ class TestWalCleanup(object):
         with open("%s/%s" % (wals_directory, "00000001.history"), "a"):
             # An empty file is fine for the purposes of these tests
             pass
-        self.xlog_db.write("%s\t42\t43\tNone\n" % "00000001.history", mode="a")
+        self.metadata.write_wal_infos(
+            [WalFileInfo.from_xlogdb_line("%s\t42\t43\tNone\n" % "00000001.history")]
+        )
 
         # AND WALs which range from just before the oldest backup to the end_wal
         # of the newest backup

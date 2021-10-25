@@ -351,7 +351,7 @@ class WalArchiver(with_metaclass(ABCMeta, RemoteStatusMixin)):
 
             # Perform the real filesystem operation with the xlogdb lock taken.
             # This makes the operation atomic from the xlogdb file POV
-            with self.server.xlogdb("a") as fxlogdb:
+            with self.server.metadata() as metadata:
                 if compressor and not wal_info.compression:
                     shutil.copystat(src_file, tmp_file)
                     os.rename(tmp_file, dst_file)
@@ -383,10 +383,7 @@ class WalArchiver(with_metaclass(ABCMeta, RemoteStatusMixin)):
                 fsync_dir(src_dir)
                 # Updates the information of the WAL archive with
                 # the latest segments
-                fxlogdb.write(wal_info.to_xlogdb_line())
-                # flush and fsync for every line
-                fxlogdb.flush()
-                os.fsync(fxlogdb.fileno())
+                metadata.write_wal_infos([wal_info])
 
         except Exception as e:
             # In case of failure save the exception for the post scripts

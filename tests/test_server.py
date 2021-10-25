@@ -48,6 +48,7 @@ from barman.lockfile import (
 from barman.postgres import PostgreSQLConnection
 from barman.process import ProcessInfo
 from barman.server import CheckOutputStrategy, CheckStrategy, Server
+from barman.storage.metadata import storage_metadata_factory
 from testing_helpers import (
     build_config_from_dicts,
     build_real_server,
@@ -295,28 +296,26 @@ class TestServer(object):
         :param expected_indices: expected WalFileInfo.name indices (values refers to wal_info_files)
         :param tmpdir: _pytest.tmpdir
         """
-        # Prepare input string
-        walstring = get_wal_lines_from_wal_list(wal_info_files)
-
         # Prepare expected list
         expected_wals = get_wal_names_from_indices_selection(
             wal_info_files, expected_indices
         )
 
-        # create a xlog.db and add those entries
-        wals_dir = tmpdir.mkdir("wals")
-        xlog = wals_dir.join("xlog.db")
-        xlog.write(walstring)
         # fake backup
         backup = build_test_backup_info(
             begin_wal="000000020000000000000001", end_wal="000000020000000000000004"
         )
 
         # mock a server object and mock a return call to get_next_backup method
+        wals_dir = tmpdir.mkdir("wals")
         server = build_real_server(
             global_conf={"barman_lock_directory": tmpdir.mkdir("lock").strpath},
             main_conf={"wals_directory": wals_dir.strpath},
         )
+
+        # create a xlog.db and add those entries
+        with server.metadata() as metadata:
+            metadata.write_wal_infos(wal_info_files)
 
         wals = []
         for wal_file in server.get_required_xlog_files(backup, 2, 41):
@@ -366,22 +365,17 @@ class TestServer(object):
         :param tmpdir: _pytest.tmpdir
         """
 
-        walstring = get_wal_lines_from_wal_list(wal_info_files)
-
         # Prepare expected list
         expected_wals = get_wal_names_from_indices_selection(
             wal_info_files, expected_indices
         )
-        # create a xlog.db and add those entries
-        wals_dir = tmpdir.mkdir("wals")
-        xlog = wals_dir.join("xlog.db")
-        xlog.write(walstring)
         # fake backup
         backup = build_test_backup_info(
             begin_wal="000000020000000000000001", end_wal="000000020000000000000004"
         )
 
         # mock a server object and mock a return call to get_next_backup method
+        wals_dir = tmpdir.mkdir("wals")
         server = build_real_server(
             global_conf={"barman_lock_directory": tmpdir.mkdir("lock").strpath},
             main_conf={"wals_directory": wals_dir.strpath},
@@ -391,6 +385,10 @@ class TestServer(object):
             begin_wal="000000020000000000000006",
             end_wal="000000020000000000000009",
         )
+
+        # create a xlog.db and add those entries
+        with server.metadata() as metadata:
+            metadata.write_wal_infos(wal_info_files)
 
         wals = []
         for wal_file in server.get_wal_until_next_backup(backup, include_history=True):
@@ -1031,18 +1029,14 @@ class TestServer(object):
         assert strategy.check_result[0].status is False
 
         # Call the check on an empty xlog file. expect it to contain errors.
-        with open(server.xlogdb_file_name, "a"):
-            # the open call forces the file creation
-            pass
-
         server.check_archive(strategy)
         assert strategy.has_error is True
         assert strategy.check_result[0].check == "WAL archive"
         assert strategy.check_result[0].status is False
 
         # Write something in the xlog db file and check for the results
-        with server.xlogdb("w") as fxlogdb:
-            fxlogdb.write("00000000000000000000")
+        with server.metadata() as metadata:
+            metadata.write_wal_infos([WalFileInfo(name="000000000000000000000000")])
         # The check strategy should contain no errors.
         strategy = CheckStrategy()
         server.check_archive(strategy)
@@ -1105,9 +1099,8 @@ class TestServer(object):
 
         # Create some content in the fake xlog.db to avoid triggering
         # empty xlogdb errors
-        with open(server.xlogdb_file_name, "a") as fxlogdb:
-            # write something
-            fxlogdb.write("00000000000000000000")
+        with server.metadata() as metadata:
+            metadata.write_wal_infos([WalFileInfo(name="000000000000000000000000")])
 
         # Utility function to generare fake WALs
         def write_wal(target_dir, wal_number, partial=False):
