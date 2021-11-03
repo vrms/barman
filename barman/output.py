@@ -1790,7 +1790,8 @@ class NagiosOutputWriter(ConsoleOutputWriter):
             elif len(good) == 1:
                 print(
                     "BARMAN OK - Ready to serve the Espresso backup "
-                    "for %s * IGNORING: %s" % (good[0], self._ignoring_prefix.join(issues))
+                    "for %s * IGNORING: %s"
+                    % (good[0], self._ignoring_prefix.join(issues))
                 )
             else:
                 # Display the output message for several servers, using
