@@ -25,6 +25,9 @@ import sphinx_bootstrap_theme
 from distutils.version import LooseVersion
 from sphinx import __version__ as sphinx_version
 
+_barman_documentation = u"Barman Documentation"
+_enterprise_db_ltd = u"EnterpriseDB UK Limited"
+
 # read barman_dir from the environment
 barman_dir = os.environ.get("BARMAN_DIR")
 
@@ -71,7 +74,7 @@ master_doc = "index"
 
 # General information about the project.
 project = u"Barman"
-copyright = u"2011-2021 EnterpriseDB UK Limited]"
+copyright = u"2011-2021 " + _enterprise_db_ltd
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -143,7 +146,6 @@ html_theme_options = {
 # Add any paths that contain custom themes here, relative to this directory.
 # html_theme_path = []
 
-# html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 html_theme_path = sphinx_bootstrap_theme.get_html_theme_path()
 
 # The name for this set of Sphinx documents.  If None, it defaults to
@@ -230,8 +232,8 @@ latex_documents = [
     (
         "index",
         "Barman.tex",
-        u"Barman Documentation",
-        u"EnterpriseDB UK Limited",
+        _barman_documentation,
+        _enterprise_db_ltd,
         "manual",
     ),
 ]
@@ -261,9 +263,7 @@ latex_documents = [
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [
-    ("index", "barman", u"Barman Documentation", [u"EnterpriseDB UK Limited"], 1)
-]
+man_pages = [("index", "barman", _barman_documentation, [_enterprise_db_ltd], 1)]
 
 # If true, show URL addresses after external links.
 # man_show_urls = False
@@ -278,8 +278,8 @@ texinfo_documents = [
     (
         "index",
         "Barman",
-        u"Barman Documentation",
-        u"EnterpriseDB UK Limited",
+        _barman_documentation,
+        _enterprise_db_ltd,
         "Barman",
         "Barman, Backup and Recovery Manager for PostgreSQL",
         "Miscellaneous",
@@ -300,9 +300,9 @@ texinfo_documents = [
 
 # Bibliographic Dublin Core info.
 epub_title = u"Barman"
-epub_author = u"EnterpriseDB UK Limited"
-epub_publisher = u"EnterpriseDB UK Limited"
-epub_copyright = u"2011-2021, EnterpriseDB UK Limited"
+epub_author = _enterprise_db_ltd
+epub_publisher = _enterprise_db_ltd
+epub_copyright = u"2011-2021, " + _enterprise_db_ltd
 
 # The language of the text. It defaults to the language option
 # or en if the language is not set.

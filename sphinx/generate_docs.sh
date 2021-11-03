@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Barman.  If not, see <http://www.gnu.org/licenses/>.
 
-BASEDIR=$(cd ${0%/*}; pwd )
+BASEDIR="$(cd ${0%/*} || exit; pwd )"
 
 # modify GEN_MODE. It must be passed like parameter value
 GEN_MODE='html'
@@ -110,7 +110,7 @@ fi
 [[ ! -d "${BARMAN_DIR}" ]] && die 'Input directory does not exists!'
 
 export BARMAN_DIR
-cd "${BASEDIR}"
+cd "${BASEDIR}" || exit
 
 # Cleans the build directory
 red "Cleaning the Build directory..."
@@ -124,6 +124,6 @@ red "Generating documentation from modules..."
 sphinx-apidoc -P -e -T -M -o docs "${BARMAN_DIR}"
 # Invokes html generation
 red "Generating ${GEN_MODE}"
-make ${GEN_MODE}
+make "${GEN_MODE}"
 
 red "DONE!!"

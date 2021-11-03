@@ -19,7 +19,7 @@
 
 set -eu
 
-BASE="$(dirname $(cd $(dirname "$0"); pwd))"
+BASE="$(dirname "$(cd "$(dirname "$0")"; pwd)")"
 cd "$BASE"
 
 if [ "$(uname -s)" = "Darwin" ]
@@ -69,7 +69,7 @@ require_clean_work_tree () {
 
 require_clean_work_tree "set version"
 
-if branch=$(git symbolic-ref --short -q HEAD) && [ $branch = 'master' ]
+if branch="$(git symbolic-ref --short -q HEAD)" && [ $branch = 'master' ]
 then
     echo "Setting version ${release_version}"
 else

@@ -30,6 +30,8 @@ from barman import xlog
 from barman.exceptions import BackupInfoBadInitialisation
 from barman.utils import fsync_dir
 
+BACKUP_INFO_FILENAME = "backup.info"
+
 # Named tuple representing a Tablespace with 'name' 'oid' and 'location'
 # as property.
 Tablespace = collections.namedtuple("Tablespace", "name oid location")
@@ -259,9 +261,8 @@ class FieldListFile(object):
             raise ValueError("either filename or file_object must be specified")
 
         # detect the filename if a file_object is passed
-        if not filename and file_object:
-            if hasattr(file_object, "name"):
-                filename = file_object.name
+        if not filename and file_object and hasattr(file_object, "name"):
+            filename = file_object.name
 
         # canonicalize filename
         if filename:
@@ -742,7 +743,7 @@ class LocalBackupInfo(BackupInfo):
         Get the default filename for the backup.info file based on
         backup ID and server directory for base backups
         """
-        return os.path.join(self.get_basebackup_directory(), "backup.info")
+        return os.path.join(self.get_basebackup_directory(), BACKUP_INFO_FILENAME)
 
     def save(self, filename=None, file_object=None):
         if not file_object:

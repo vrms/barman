@@ -161,11 +161,10 @@ class AnnotationManagerCloud(AnnotationManager):
             delimiter="",
         ):
             key_parts = object_key.split("/")
-            if len(key_parts) > 3:
-                if key_parts[-2] == "annotations":
-                    backup_id = key_parts[-3]
-                    annotation_key = key_parts[-1]
-                    self.annotation_cache[(backup_id, annotation_key)] = True
+            if len(key_parts) > 3 and key_parts[-2] == "annotations":
+                backup_id = key_parts[-3]
+                annotation_key = key_parts[-1]
+                self.annotation_cache[(backup_id, annotation_key)] = True
 
     def delete_annotation(self, backup_id, key):
         """

@@ -37,7 +37,7 @@ from barman.annotations import KeepManagerMixinCloud
 from barman.backup_executor import ConcurrentBackupStrategy, ExclusiveBackupStrategy
 from barman.exceptions import BarmanException
 from barman.fs import path_allowed
-from barman.infofile import BackupInfo
+from barman.infofile import BackupInfo, BACKUP_INFO_FILENAME
 from barman.postgres_plumbing import EXCLUDE_LIST, PGDATA_EXCLUDE_LIST
 from barman.utils import (
     BarmanEncoder,
@@ -62,6 +62,8 @@ LOGGING_FORMAT = "%(asctime)s [%(process)s] %(levelname)s: %(message)s"
 
 # Allowed compression algorithms
 ALLOWED_COMPRESSIONS = {".gz": "gzip", ".bz2": "bzip2"}
+
+DEBUG_LOG_PREFIX = "Exception details:"
 
 
 def configure_logging(config):
@@ -677,7 +679,7 @@ class CloudInterface(with_metaclass(ABCMeta)):
                 logging.error(
                     "Upload error: %s (worker %s)", force_str(exc), process_number
                 )
-                logging.debug("Exception details:", exc_info=exc)
+                logging.debug(DEBUG_LOG_PREFIX, exc_info=exc)
                 self.errors_queue.put(force_str(exc))
             except KeyboardInterrupt:
                 if not self.abort_requested:
@@ -707,7 +709,6 @@ class CloudInterface(with_metaclass(ABCMeta)):
                     % (task["key"], task["part_number"], process_number)
                 )
                 os.unlink(task["body"])
-                return
             else:
                 logging.info(
                     "Uploading '%s', part '%s' (worker %s)"
@@ -1237,7 +1238,7 @@ class CloudBackupUploaderBarman(CloudBackupUploader):
         """
         # Read the backup_info file from disk as the backup has already been created
         backup_info = BackupInfo(self.backup_id)
-        backup_info.load(filename=os.path.join(self.backup_dir, "backup.info"))
+        backup_info.load(filename=os.path.join(self.backup_dir, BACKUP_INFO_FILENAME))
         controller = self._create_upload_controller(self.backup_id)
         try:
             self._backup_copy(
@@ -1255,11 +1256,11 @@ class CloudBackupUploaderBarman(CloudBackupUploader):
 
             # Manually add backup.info
             with open(
-                os.path.join(self.backup_dir, "backup.info"), "rb"
+                os.path.join(self.backup_dir, BACKUP_INFO_FILENAME), "rb"
             ) as backup_info_file:
                 self.cloud_interface.upload_fileobj(
                     backup_info_file,
-                    key=os.path.join(controller.key_prefix, "backup.info"),
+                    key=os.path.join(controller.key_prefix, BACKUP_INFO_FILENAME),
                 )
 
         # Use BaseException instead of Exception to catch events like
@@ -1288,7 +1289,7 @@ class CloudBackupUploaderBarman(CloudBackupUploader):
         if len(msg_lines) == 0:
             msg_lines = [type(exc).__name__]
         logging.error("Backup upload failed %s (%s)", action, msg_lines[0])
-        logging.debug("Exception details:", exc_info=exc)
+        logging.debug(DEBUG_LOG_PREFIX, exc_info=exc)
 
 
 class CloudBackupUploaderPostgres(CloudBackupUploader):
@@ -1431,7 +1432,7 @@ class CloudBackupUploaderPostgres(CloudBackupUploader):
                 with BytesIO() as backup_info_file:
                     backup_info.save(file_object=backup_info_file)
                     backup_info_file.seek(0, os.SEEK_SET)
-                    key = os.path.join(controller.key_prefix, "backup.info")
+                    key = os.path.join(controller.key_prefix, BACKUP_INFO_FILENAME)
                     logging.info("Uploading '%s'", key)
                     self.cloud_interface.upload_fileobj(backup_info_file, key)
             except BaseException as exc:
@@ -1474,7 +1475,7 @@ class CloudBackupUploaderPostgres(CloudBackupUploader):
                 "error", "failure %s (%s)" % (action, msg_lines[0])
             )
         logging.error("Backup failed %s (%s)", action, msg_lines[0])
-        logging.debug("Exception details:", exc_info=exc)
+        logging.debug(DEBUG_LOG_PREFIX, exc_info=exc)
 
 
 class BackupFileInfo(object):
@@ -1593,7 +1594,7 @@ class CloudBackupCatalog(KeepManagerMixinCloud):
         :param str backup_id: The backup id to load
         :rtype: BackupInfo
         """
-        backup_info_path = os.path.join(self.prefix, backup_id, "backup.info")
+        backup_info_path = os.path.join(self.prefix, backup_id, BACKUP_INFO_FILENAME)
         backup_info_file = self.cloud_interface.remote_open(backup_info_path)
         if backup_info_file is None:
             return None

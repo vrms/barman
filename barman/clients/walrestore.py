@@ -491,9 +491,8 @@ class RemoteGetWal(object):
         """
         if self.ssh_process.returncode != 0:
             return self.ssh_process.returncode
-        if self.decompressor:
-            if self.decompressor.returncode != 0:
-                return self.decompressor.returncode
+        if self.decompressor and self.decompressor.returncode != 0:
+            return self.decompressor.returncode
         return 0
 
 

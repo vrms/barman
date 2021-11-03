@@ -225,6 +225,10 @@ class Server(RemoteStatusMixin):
     # the strategy for the management of the results of the various checks
     __default_check_strategy = CheckOutputStrategy()
 
+    _permission_denied_msg = "Permission denied, unable to access '%s'"
+    _cannot_open_file_msg = "Cannot open %s file for server %s: %s"
+    _server_not_passive_msg = "server %s is not passive"
+
     def __init__(self, config):
         """
         Server constructor.
@@ -804,22 +808,20 @@ class Server(RemoteStatusMixin):
                 # a replication slot with the specified name is NOT present
                 # and NOT active.
                 # NOTE: This is not a failure, just a warning.
-                if slot is not None:
-                    if slot.restart_lsn is not None:
-                        slot_status = "initialised"
+                if slot is not None and slot.restart_lsn is not None:
+                    slot_status = "initialised"
 
-                        # Check if the slot is also active
-                        if slot.active:
-                            slot_status = "active"
+                    # Check if the slot is also active
+                    if slot.active:
+                        slot_status = "active"
 
-                        # Warn the user
-                        check_strategy.result(
-                            self.config.name,
-                            True,
-                            hint="WARNING: slot '%s' is %s but not required "
-                            "by the current config"
-                            % (self.config.slot_name, slot_status),
-                        )
+                    # Warn the user
+                    check_strategy.result(
+                        self.config.name,
+                        True,
+                        hint="WARNING: slot '%s' is %s but not required "
+                        "by the current config" % (self.config.slot_name, slot_status),
+                    )
 
     def _make_directories(self):
         """
@@ -945,15 +947,18 @@ class Server(RemoteStatusMixin):
         systemid_from_streaming = remote_status.get("streaming_systemid")
         systemid_from_postgres = remote_status.get("postgres_systemid")
         # If both available, makes sure they are coherent with each other
-        if systemid_from_streaming and systemid_from_postgres:
-            if systemid_from_streaming != systemid_from_postgres:
-                check_strategy.result(
-                    self.config.name,
-                    systemid_from_streaming == systemid_from_postgres,
-                    hint="is the streaming DSN targeting the same server "
-                    "of the PostgreSQL connection string?",
-                )
-                return
+        if (
+            systemid_from_streaming
+            and systemid_from_postgres
+            and systemid_from_streaming != systemid_from_postgres
+        ):
+            check_strategy.result(
+                self.config.name,
+                systemid_from_streaming == systemid_from_postgres,
+                hint="is the streaming DSN targeting the same server "
+                "of the PostgreSQL connection string?",
+            )
+            return
 
         systemid_from_server = systemid_from_streaming or systemid_from_postgres
         if not systemid_from_server:
@@ -1233,7 +1238,7 @@ class Server(RemoteStatusMixin):
         except LockFilePermissionDenied as e:
             # We cannot access the lockfile.
             # Exit without removing the backup.
-            output.error("Permission denied, unable to access '%s'" % e)
+            output.error(self._permission_denied_msg % e)
             return
 
         try:
@@ -1266,7 +1271,7 @@ class Server(RemoteStatusMixin):
         except LockFilePermissionDenied as e:
             # We cannot access the lockfile.
             # warn the user and terminate
-            output.error("Permission denied, unable to access '%s'" % e)
+            output.error(self._permission_denied_msg % e)
             return
 
     def backup(self, wait=False, wait_timeout=None):
@@ -1342,7 +1347,7 @@ class Server(RemoteStatusMixin):
             output.error("Another backup process is running")
 
         except LockFilePermissionDenied as e:
-            output.error("Permission denied, unable to access '%s'" % e)
+            output.error(self._permission_denied_msg % e)
 
     def get_available_backups(self, status_filter=BackupManager.DEFAULT_STATUS_FILTER):
         """
@@ -2125,7 +2130,7 @@ class Server(RemoteStatusMixin):
                 "Skipping to the next server" % self.config.name
             )
         except LockFilePermissionDenied as e:
-            output.error("Permission denied, unable to access '%s'" % e)
+            output.error(self._permission_denied_msg % e)
         except (OSError, IOError) as e:
             output.error("%s", e)
 
@@ -2904,7 +2909,7 @@ class Server(RemoteStatusMixin):
         except LockFilePermissionDenied as e:
             # We cannot access the lockfile.
             # warn the user and terminate
-            output.error("Permission denied, unable to access '%s'" % e)
+            output.error(self._permission_denied_msg % e)
             return
 
     def sync_status(self, last_wal=None, last_position=None):
@@ -3245,8 +3250,7 @@ class Server(RemoteStatusMixin):
                 return SyncWalInfo._make(f.readline().split("\t"))
         except (OSError, IOError) as e:
             raise SyncError(
-                "Cannot open %s file for server %s: %s"
-                % (SYNC_WALS_INFO_FILE, self.config.name, e)
+                self._cannot_open_file_msg % (SYNC_WALS_INFO_FILE, self.config.name, e)
             )
 
     def primary_node_info(self, last_wal=None, last_position=None):
@@ -3266,7 +3270,7 @@ class Server(RemoteStatusMixin):
             "primary sync-info(%s, %s, %s)", self.config.name, last_wal, last_position
         )
         if not self.passive_node:
-            raise SyncError("server %s is not passive" % self.config.name)
+            raise SyncError(self._server_not_passive_msg % self.config.name)
         # Issue a call to 'barman sync-info' to the primary node,
         # using primary_ssh_command option to establish an
         # SSH connection.
@@ -3341,8 +3345,7 @@ class Server(RemoteStatusMixin):
         except (OSError, IOError) as e:
             # Wrap file access exceptions using SyncError
             raise SyncError(
-                "Cannot open %s file for server %s: %s"
-                % (PRIMARY_INFO_FILE, self.config.name, e)
+                self._cannot_open_file_msg % (PRIMARY_INFO_FILE, self.config.name, e)
             )
 
         return remote_info
@@ -3386,7 +3389,7 @@ class Server(RemoteStatusMixin):
 
         _logger.debug("sync_backup(%s, %s)", self.config.name, backup_name)
         if not self.passive_node:
-            raise SyncError("server %s is not passive" % self.config.name)
+            raise SyncError(self._server_not_passive_msg % self.config.name)
 
         local_backup_info = self.get_backup(backup_name)
         # Step 1. Parse data from Primary server.
@@ -3566,7 +3569,7 @@ class Server(RemoteStatusMixin):
         """
         _logger.debug("sync_wals(%s)", self.config.name)
         if not self.passive_node:
-            raise SyncError("server %s is not passive" % self.config.name)
+            raise SyncError(self._server_not_passive_msg % self.config.name)
 
         # Try to acquire the sync-wal lock if the lock is not available,
         # abort the sync-wal operation
@@ -3781,6 +3784,5 @@ class Server(RemoteStatusMixin):
         except (OSError, IOError) as e:
             # Wrap file access exceptions using SyncError
             raise SyncError(
-                "Cannot open %s file for server %s: %s"
-                % (PRIMARY_INFO_FILE, self.config.name, e)
+                self._cannot_open_file_msg % (PRIMARY_INFO_FILE, self.config.name, e)
             )

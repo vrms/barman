@@ -28,6 +28,7 @@ from barman.cloud import (
     CloudBackupUploaderBarman,
     CloudBackupUploaderPostgres,
     configure_logging,
+    DEBUG_LOG_PREFIX,
 )
 from barman.cloud_providers import get_cloud_interface
 from barman.exceptions import (
@@ -84,9 +85,8 @@ def build_conninfo(config):
     conn_parts = []
 
     # If -d specified a conninfo string, just return it
-    if config.dbname is not None:
-        if config.dbname == "" or "=" in config.dbname:
-            return config.dbname
+    if config.dbname is not None and config.dbname == "" or "=" in config.dbname:
+        return config.dbname
 
     if config.host:
         conn_parts.append("host=%s" % quote_conninfo(config.host))
@@ -165,7 +165,7 @@ def main(args=None):
                     postgres.connect()
                 except PostgresConnectionError as exc:
                     logging.error("Cannot connect to postgres: %s", force_str(exc))
-                    logging.debug("Exception details:", exc_info=exc)
+                    logging.debug(DEBUG_LOG_PREFIX, exc_info=exc)
                     raise SystemExit(1)
 
                 with closing(postgres):
@@ -176,15 +176,15 @@ def main(args=None):
 
     except KeyboardInterrupt as exc:
         logging.error("Barman cloud backup was interrupted by the user")
-        logging.debug("Exception details:", exc_info=exc)
+        logging.debug(DEBUG_LOG_PREFIX, exc_info=exc)
         raise SystemExit(1)
     except UnrecoverableHookScriptError as exc:
         logging.error("Barman cloud backup exception: %s", force_str(exc))
-        logging.debug("Exception details:", exc_info=exc)
+        logging.debug(DEBUG_LOG_PREFIX, exc_info=exc)
         raise SystemExit(63)
     except Exception as exc:
         logging.error("Barman cloud backup exception: %s", force_str(exc))
-        logging.debug("Exception details:", exc_info=exc)
+        logging.debug(DEBUG_LOG_PREFIX, exc_info=exc)
         raise SystemExit(1)
     finally:
         # Remove the temporary directory and all the contained files

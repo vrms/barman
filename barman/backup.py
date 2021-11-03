@@ -304,7 +304,6 @@ class BackupManager(RemoteStatusMixin, KeepManagerMixin):
                     previous_backup.backup_id,
                     status_filter=status_filter,
                 )
-                continue
             else:
                 # A previous backup exists and it is not a standalone backup so we
                 # must not remove any WALs and we can discard any wal_ranges_to_protect

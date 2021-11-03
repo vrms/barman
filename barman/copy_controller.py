@@ -1129,14 +1129,10 @@ class RsyncCopyController(object):
                 continue
             # Build a human readable name to refer to an item in the output
             ident = item.label
-            if not analysis_start:
-                analysis_start = item.analysis_start_time
-            elif analysis_start > item.analysis_start_time:
+            if not analysis_start or analysis_start > item.analysis_start_time:
                 analysis_start = item.analysis_start_time
 
-            if not analysis_end:
-                analysis_end = item.analysis_end_time
-            elif analysis_end < item.analysis_end_time:
+            if not analysis_end or analysis_end < item.analysis_end_time:
                 analysis_end = item.analysis_end_time
 
             stat["analysis_time_per_item"][ident] = total_seconds(

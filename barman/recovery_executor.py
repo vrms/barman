@@ -70,6 +70,13 @@ class RecoveryExecutor(object):
     Class responsible of recovery operations
     """
 
+    _auto_conf_filename = "postgresql.auto.conf"
+    _recovery_conf_filename = "recovery.conf"
+
+    _illegal_target_action_msg = (
+        "Illegal target action '%s' for this version of PostgreSQL"
+    )
+
     # Potentially dangerous options list, which need to be revised by the user
     # after a recovery
     DANGEROUS_OPTIONS = [
@@ -172,13 +179,15 @@ class RecoveryExecutor(object):
 
         # If the backup we are recovering is still not validated and we
         # haven't requested the get-wal feature, display a warning message
-        if not recovery_info["get_wal"]:
-            if backup_info.status == BackupInfo.WAITING_FOR_WALS:
-                output.warning(
-                    "IMPORTANT: You have requested a recovery operation for "
-                    "a backup that does not have yet all the WAL files that "
-                    "are required for consistency."
-                )
+        if (
+            not recovery_info["get_wal"]
+            and backup_info.status == BackupInfo.WAITING_FOR_WALS
+        ):
+            output.warning(
+                "IMPORTANT: You have requested a recovery operation for "
+                "a backup that does not have yet all the WAL files that "
+                "are required for consistency."
+            )
 
         # Set targets for PITR
         self._set_pitr_targets(
@@ -391,12 +400,12 @@ class RecoveryExecutor(object):
         # Set up a list of configuration files
         recovery_info["configuration_files"].append("postgresql.conf")
         if backup_info.version >= 90400:
-            recovery_info["configuration_files"].append("postgresql.auto.conf")
+            recovery_info["configuration_files"].append(self._auto_conf_filename)
 
         # Identify the file holding the recovery configuration
-        results["recovery_configuration_file"] = "postgresql.auto.conf"
+        results["recovery_configuration_file"] = self._auto_conf_filename
         if backup_info.version < 120000:
-            results["recovery_configuration_file"] = "recovery.conf"
+            results["recovery_configuration_file"] = self._recovery_conf_filename
 
         # Handle remote recovery options
         if remote_command:
@@ -513,24 +522,21 @@ class RecoveryExecutor(object):
             if backup_info.version < 90100:
                 if target_action:
                     raise RecoveryTargetActionException(
-                        "Illegal target action '%s' "
-                        "for this version of PostgreSQL" % target_action
+                        self._illegal_target_action_msg % target_action
                     )
             elif 90100 <= backup_info.version < 90500:
                 if target_action == "pause":
                     recovery_info["pause_at_recovery_target"] = "on"
                 elif target_action:
                     raise RecoveryTargetActionException(
-                        "Illegal target action '%s' "
-                        "for this version of PostgreSQL" % target_action
+                        self._illegal_target_action_msg % target_action
                     )
             else:
                 if target_action in ("pause", "shutdown", "promote"):
                     recovery_info["recovery_target_action"] = target_action
                 elif target_action:
                     raise RecoveryTargetActionException(
-                        "Illegal target action '%s' "
-                        "for this version of PostgreSQL" % target_action
+                        self._illegal_target_action_msg % target_action
                     )
 
             output.info(
@@ -1077,9 +1083,11 @@ class RecoveryExecutor(object):
                 recovery_conf_lines.append("standby_mode = 'on'")
 
             if remote_command:
-                recovery_file = os.path.join(recovery_info["tempdir"], "recovery.conf")
+                recovery_file = os.path.join(
+                    recovery_info["tempdir"], self._recovery_conf_filename
+                )
             else:
-                recovery_file = os.path.join(dest, "recovery.conf")
+                recovery_file = os.path.join(dest, self._recovery_conf_filename)
 
             with open(recovery_file, "wb") as recovery:
                 recovery.write(("\n".join(recovery_conf_lines) + "\n").encode("utf-8"))
@@ -1156,7 +1164,7 @@ class RecoveryExecutor(object):
             # Make sure 'postgresql.auto.conf' file exists in
             # recovery_info['temporary_configuration_files'] because
             # the recovery settings will end up there
-            conf_file = "postgresql.auto.conf"
+            conf_file = self._auto_conf_filename
             if conf_file not in recovery_info["configuration_files"]:
                 if remote_command:
                     conf_file_path = os.path.join(recovery_info["tempdir"], conf_file)
@@ -1182,7 +1190,7 @@ class RecoveryExecutor(object):
         for conf_file in recovery_info["temporary_configuration_files"]:
 
             append_lines = None
-            if conf_file.endswith("postgresql.auto.conf"):
+            if conf_file.endswith(self._auto_conf_filename):
                 append_lines = recovery_info.get("auto_conf_append_lines")
 
             # Identify and comment out dangerous options, replacing them with

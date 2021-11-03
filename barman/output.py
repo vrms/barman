@@ -65,6 +65,9 @@ error_exit_code = 1
 #: Enable colors in the output
 ansi_colors_enabled = False
 
+PERCENT_FORMAT = "{percent:.2%}"
+NOT_AVAILABLE = "not available"
+
 
 def _ansi_color(command):
     """
@@ -375,6 +378,9 @@ def set_output_writer(new_writer, *args, **kwargs):
 
 
 class ConsoleOutputWriter(object):
+    _server_prefix = "Server %s:"
+    _tab_prefix = "\t%s: %s"
+
     def __init__(self, debug=False, quiet=False):
         """
         Default output writer that output everything on console.
@@ -615,7 +621,7 @@ class ConsoleOutputWriter(object):
         # If server has configuration errors
         elif disabled:
             display_name += " (WARNING: disabled)"
-        self.info("Server %s:" % display_name)
+        self.info(self._server_prefix % display_name)
         self.active = active
 
     def result_check(self, server_name, check, status, hint=None):
@@ -631,11 +637,13 @@ class ConsoleOutputWriter(object):
         self._record_check(server_name, check, status, hint)
         if hint:
             self.info(
-                "\t%s: %s (%s)"
+                (self._tab_prefix + " (%s)")
                 % (check, _green("OK") if status else _red("FAILED"), hint)
             )
         else:
-            self.info("\t%s: %s" % (check, _green("OK") if status else _red("FAILED")))
+            self.info(
+                self._tab_prefix % (check, _green("OK") if status else _red("FAILED"))
+            )
 
     def init_list_backup(self, server_name, minimal=False):
         """
@@ -721,7 +729,7 @@ class ConsoleOutputWriter(object):
                 self.info(
                     "    Incremental size     : %s (-%s)",
                     pretty_size(data["deduplicated_size"]),
-                    "{percent:.2%}".format(percent=deduplication_ratio),
+                    PERCENT_FORMAT.format(percent=deduplication_ratio),
                 )
             self.info("    Timeline             : %s", data["timeline"])
             self.info("    Begin WAL            : %s", data["begin_wal"])
@@ -731,7 +739,7 @@ class ConsoleOutputWriter(object):
             if data["wal_compression_ratio"] > 0:
                 self.info(
                     "    WAL compression ratio: %s",
-                    "{percent:.2%}".format(percent=data["wal_compression_ratio"]),
+                    PERCENT_FORMAT.format(percent=data["wal_compression_ratio"]),
                 )
             self.info("    Begin time           : %s", data["begin_time"])
             self.info("    End time             : %s", data["end_time"])
@@ -779,7 +787,7 @@ class ConsoleOutputWriter(object):
             if data["wal_until_next_compression_ratio"] > 0:
                 self.info(
                     "    Compression ratio    : %s",
-                    "{percent:.2%}".format(
+                    PERCENT_FORMAT.format(
                         percent=data["wal_until_next_compression_ratio"]
                     ),
                 )
@@ -796,12 +804,12 @@ class ConsoleOutputWriter(object):
                 "    Retention Policy     : %s",
                 data["retention_policy_status"] or "not enforced",
             )
-            previous_backup_id = data.setdefault("previous_backup_id", "not available")
+            previous_backup_id = data.setdefault("previous_backup_id", NOT_AVAILABLE)
             self.info(
                 "    Previous Backup      : %s",
                 previous_backup_id or "- (this is the oldest base backup)",
             )
-            next_backup_id = data.setdefault("next_backup_id", "not available")
+            next_backup_id = data.setdefault("next_backup_id", NOT_AVAILABLE)
             self.info(
                 "    Next Backup          : %s",
                 next_backup_id or "- (this is the latest base backup)",
@@ -822,7 +830,7 @@ class ConsoleOutputWriter(object):
 
         :param str server_name: the server we are start listing
         """
-        self.info("Server %s:", server_name)
+        self.info(self._server_prefix, server_name)
 
     def result_status(self, server_name, status, description, message):
         """
@@ -835,7 +843,7 @@ class ConsoleOutputWriter(object):
         :param str description: the returned status description
         :param str,object message: status message. It will be converted to str
         """
-        self.info("\t%s: %s", description, str(message))
+        self.info(self._tab_prefix, description, str(message))
 
     def init_replication_status(self, server_name, minimal=False):
         """
@@ -1043,7 +1051,7 @@ class ConsoleOutputWriter(object):
 
         :param str server_name: the server we are displaying
         """
-        self.info("Server %s:" % server_name)
+        self.info(self._server_prefix % server_name)
 
     def result_show_server(self, server_name, server_info):
         """
@@ -1053,7 +1061,7 @@ class ConsoleOutputWriter(object):
         :param dict server_info: a dictionary containing the info to display
         """
         for status, message in sorted(server_info.items()):
-            self.info("\t%s: %s", status, message)
+            self.info(self._tab_prefix, status, message)
 
 
 class JsonOutputWriter(ConsoleOutputWriter):
@@ -1330,9 +1338,8 @@ class JsonOutputWriter(ConsoleOutputWriter):
                     dict(
                         incremental_size=pretty_size(data["deduplicated_size"]),
                         incremental_size_bytes=data["deduplicated_size"],
-                        incremental_size_ratio="-{percent:.2%}".format(
-                            percent=deduplication_ratio
-                        ),
+                        incremental_size_ratio="-"
+                        + PERCENT_FORMAT.format(percent=deduplication_ratio),
                     )
                 )
             output["base_backup_information"].update(
@@ -1345,7 +1352,7 @@ class JsonOutputWriter(ConsoleOutputWriter):
             if data["wal_compression_ratio"] > 0:
                 output["base_backup_information"].update(
                     dict(
-                        wal_compression_ratio="{percent:.2%}".format(
+                        wal_compression_ratio=PERCENT_FORMAT.format(
                             percent=data["wal_compression_ratio"]
                         )
                     )
@@ -1411,7 +1418,7 @@ class JsonOutputWriter(ConsoleOutputWriter):
                 wal_output["wal_rate"] = "%0.2f/hour" % (data["wals_per_second"] * 3600)
                 wal_output["wal_rate_per_second"] = data["wals_per_second"]
             if data["wal_until_next_compression_ratio"] > 0:
-                wal_output["compression_ratio"] = "{percent:.2%}".format(
+                wal_output["compression_ratio"] = PERCENT_FORMAT.format(
                     percent=data["wal_until_next_compression_ratio"]
                 )
             if data["children_timelines"]:
@@ -1423,8 +1430,8 @@ class JsonOutputWriter(ConsoleOutputWriter):
                 for history in data["children_timelines"]:
                     wal_output["timelines"].append(str(history.tli))
 
-            previous_backup_id = data.setdefault("previous_backup_id", "not available")
-            next_backup_id = data.setdefault("next_backup_id", "not available")
+            previous_backup_id = data.setdefault("previous_backup_id", NOT_AVAILABLE)
+            next_backup_id = data.setdefault("next_backup_id", NOT_AVAILABLE)
 
             output["catalog_information"] = {
                 "retention_policy": data["retention_policy_status"] or "not enforced",
@@ -1682,6 +1689,8 @@ class NagiosOutputWriter(ConsoleOutputWriter):
     On close it writes a nagios-plugin compatible status
     """
 
+    _ignoring_prefix = " * IGNORING: "
+
     def _out(self, message, args):
         """
         Do not print anything on standard output
@@ -1776,12 +1785,12 @@ class NagiosOutputWriter(ConsoleOutputWriter):
             if len(good) == 0:
                 print(
                     "BARMAN OK - No server configured * IGNORING: %s"
-                    % (" * IGNORING: ".join(issues))
+                    % (self._ignoring_prefix.join(issues))
                 )
             elif len(good) == 1:
                 print(
                     "BARMAN OK - Ready to serve the Espresso backup "
-                    "for %s * IGNORING: %s" % (good[0], " * IGNORING: ".join(issues))
+                    "for %s * IGNORING: %s" % (good[0], self._ignoring_prefix.join(issues))
                 )
             else:
                 # Display the output message for several servers, using
@@ -1789,7 +1798,7 @@ class NagiosOutputWriter(ConsoleOutputWriter):
                 print(
                     "BARMAN OK - Ready to serve the Espresso backup "
                     "for %d servers * %s * IGNORING: %s"
-                    % (len(good), " * ".join(good), " * IGNORING: ".join(issues))
+                    % (len(good), " * ".join(good), self._ignoring_prefix.join(issues))
                 )
         else:
             # No issues, all good!
