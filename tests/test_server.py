@@ -73,16 +73,6 @@ def create_fake_info_file(name, size, time, compression=None):
     return info
 
 
-def get_wal_lines_from_wal_list(wal_list):
-    """
-    converts each wal_info to an xlogdb line and concats into one string
-    """
-    walstring = ""
-    for wal_info in wal_list:
-        walstring += wal_info.to_xlogdb_line()
-    return walstring
-
-
 def get_wal_names_from_indices_selection(wal_info_files, indices):
     # Prepare expected list
     expected_wals = []
@@ -713,14 +703,23 @@ class TestServer(object):
         # Mock method get_wal_until_next_backup for returning a list of
         # 3 fake WAL. the first one is the start and stop WAL of the backup
         wal_list = [
-            WalFileInfo.from_xlogdb_line(
-                "000000010000000000000002\t16777216\t1434450086.53\tNone\n"
+            WalFileInfo(
+                name="000000010000000000000002",
+                size=16777216,
+                time=1434450086.53,
+                compression=None,
             ),
-            WalFileInfo.from_xlogdb_line(
-                "000000010000000000000003\t16777216\t1434450087.54\tNone\n"
+            WalFileInfo(
+                name="000000010000000000000003",
+                size=16777216,
+                time=1434450087.54,
+                compression=None,
             ),
-            WalFileInfo.from_xlogdb_line(
-                "000000010000000000000004\t16777216\t1434450088.55\tNone\n"
+            WalFileInfo(
+                name="000000010000000000000004",
+                size=16777216,
+                time=1434450088.55,
+                compression=None,
             ),
         ]
         get_wal_mock.return_value = wal_list

@@ -121,10 +121,11 @@ Then update the following to just interact with Metadata:
 * `barman.server.Server.set_sync_starting_point`
 * ~`barman.wal_archiver.WalArchiver.archive_wal`
 
+~* remove remaining xlogdb-isms (e.g. from_xlog_line etc)
+~  - from_file? <-- it's ok, this creates WalFileInfo from an actual WAL file
 * re-implement so we're keeping the file open and holding seek positions
   etc - we will need to do this for backward compatibility
     - or can we ditch backward compatibility at this point?
-* remove remaining xlogdb-isms (e.g. from_xlog_line etc)
 * rename metadata to xlog_metadata
   - also it is logically different to the backup metadata so it should
     just be a separate thing (it may happen to share the same backend

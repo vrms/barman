@@ -217,12 +217,21 @@ class TestBackup(object):
         )
         metadata.write_wal_infos(
             [
-                WalFileInfo.from_xlogdb_line(
-                    "000000010000000000000001\t42\t43\tNone\n"
+                WalFileInfo(
+                    name="000000010000000000000001",
+                    size=42,
+                    time=43,
+                    compression=None,
                 ),
-                WalFileInfo.from_xlogdb_line("00000002.history\t42\t43\tNone\n"),
-                WalFileInfo.from_xlogdb_line("00000003.history\t42\t43\tNone\n"),
-                WalFileInfo.from_xlogdb_line("00000004.history\t42\t43\tNone\n"),
+                WalFileInfo(
+                    name="00000002.history", size=42, time=43, compression=None
+                ),
+                WalFileInfo(
+                    name="00000003.history", size=42, time=43, compression=None
+                ),
+                WalFileInfo(
+                    name="00000004.history", size=42, time=43, compression=None
+                ),
             ]
         )
         backup_manager.server.metadata.return_value.__enter__.return_value = metadata
@@ -768,7 +777,14 @@ class TestWalCleanup(object):
             backup_manager.server.config.wals_directory,
         )
         self.metadata.write_wal_infos(
-            [WalFileInfo.from_xlogdb_line("000000010000000000000001\t42\t43\tNone\n")]
+            [
+                WalFileInfo(
+                    name="000000010000000000000001",
+                    size=42,
+                    time=43,
+                    compression=None,
+                )
+            ]
         )
 
         # This must be a side-effect so we open xlog_db each time it is called
@@ -816,7 +832,7 @@ class TestWalCleanup(object):
             # An empty file is fine for the purposes of these tests
             pass
         self.metadata.write_wal_infos(
-            [WalFileInfo.from_xlogdb_line("%s\t42\t43\tNone\n" % wal)]
+            [WalFileInfo(name=wal, size=42, time=43, compression=None)]
         )
 
     def _create_wals_on_filesystem(self, wals_directory, begin_wal, end_wal):
@@ -969,7 +985,7 @@ class TestWalCleanup(object):
             # An empty file is fine for the purposes of these tests
             pass
         self.metadata.write_wal_infos(
-            [WalFileInfo.from_xlogdb_line("%s\t42\t43\tNone\n" % "00000001.history")]
+            [WalFileInfo(name="00000001.history", size=42, time=43, compression=None)]
         )
 
         # AND WALs which range from just before the oldest backup to the end_wal

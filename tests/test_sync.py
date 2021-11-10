@@ -139,12 +139,24 @@ class TestSync(object):
         # build a test xlog.db
         metadata.write_wal_infos(
             [
-                WalFileInfo.from_xlogdb_line(w)
-                for w in [
-                    "000000010000000000000002\t16777216\t1406019026.0\tNone\n",
-                    "000000010000000000000003\t16777216\t1406019026.0\tNone\n",
-                    "000000010000000000000004\t16777216\t1406019329.93\tNone\n",
-                ]
+                WalFileInfo(
+                    name="000000010000000000000002",
+                    size=16777216,
+                    time=1406019026.0,
+                    compression=None,
+                ),
+                WalFileInfo(
+                    name="000000010000000000000003",
+                    size=16777216,
+                    time=1406019026.0,
+                    compression=None,
+                ),
+                WalFileInfo(
+                    name="000000010000000000000004",
+                    size=16777216,
+                    time=1406019329.93,
+                    compression=None,
+                ),
             ]
         )
 
@@ -212,14 +224,36 @@ class TestSync(object):
         # Write some WAL data for remainder of test
         metadata.write_wal_infos(
             [
-                WalFileInfo.from_xlogdb_line(w)
-                for w in [
-                    "000000010000000000000001\t16777216\t1406019022.4\tNone\n",
-                    "000000010000000000000002\t16777216\t1406019026.0\tNone\n",
-                    "000000010000000000000003\t16777216\t1406019026.0\tNone\n",
-                    "000000010000000000000004\t16777216\t1406019329.93\tNone\n",
-                    "000000010000000000000005\t16777216\t1406019330.84\tNone\n",
-                ]
+                WalFileInfo(
+                    name="000000010000000000000001",
+                    size=16777216,
+                    time=1406019022.4,
+                    compression=None,
+                ),
+                WalFileInfo(
+                    name="000000010000000000000002",
+                    size=16777216,
+                    time=1406019026.0,
+                    compression=None,
+                ),
+                WalFileInfo(
+                    name="000000010000000000000003",
+                    size=16777216,
+                    time=1406019026.0,
+                    compression=None,
+                ),
+                WalFileInfo(
+                    name="000000010000000000000004",
+                    size=16777216,
+                    time=1406019329.93,
+                    compression=None,
+                ),
+                WalFileInfo(
+                    name="000000010000000000000005",
+                    size=16777216,
+                    time=1406019330.84,
+                    compression=None,
+                ),
             ]
         )
 
@@ -598,14 +632,37 @@ class TestSync(object):
         assert err == ""
         # check the xlog content for primary.info wals
         exp_xlog = [
-            "000000010000000000000002\t16777216\t1406019026.0\tNone\n",
-            "000000010000000000000003\t16777216\t1406019026.0\tNone\n",
-            "000000010000000000000004\t16777216\t1406019329.93\tNone\n",
-            "000000010000000000000005\t16777216\t1406019330.84\tNone\n",
+            WalFileInfo(
+                name="000000010000000000000002",
+                size=16777216,
+                time=1406019026.0,
+                compression=None,
+            ),
+            WalFileInfo(
+                name="000000010000000000000003",
+                size=16777216,
+                time=1406019026.0,
+                compression=None,
+            ),
+            WalFileInfo(
+                name="000000010000000000000004",
+                size=16777216,
+                time=1406019329.93,
+                compression=None,
+            ),
+            WalFileInfo(
+                name="000000010000000000000005",
+                size=16777216,
+                time=1406019330.84,
+                compression=None,
+            ),
         ]
         with server.metadata() as metadata:
             for i, wal_info in enumerate(metadata.get_wal_infos()):
-                assert wal_info.to_xlogdb_line() == exp_xlog[i]
+                assert wal_info.name == exp_xlog[i].name
+                assert wal_info.size == exp_xlog[i].size
+                assert wal_info.time == exp_xlog[i].time
+                assert wal_info.compression == exp_xlog[i].compression
 
     def _create_mock_config(self, tmpdir):
         """Helper for passive node tests which returns a mock config object"""
