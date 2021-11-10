@@ -1034,8 +1034,8 @@ class BackupManager(RemoteStatusMixin, KeepManagerMixin):
         comp_manager = self.compression_manager
         wal_count = label_count = history_count = 0
         # lock the xlogdb as we are about replacing it completely
-        with self.server.metadata() as metadata:
-            metadata.truncate()
+        with self.server.wal_metadata() as wal_metadata:
+            wal_metadata.truncate()
             for name in sorted(os.listdir(root)):
                 # ignore the xlogdb and its lockfile
                 if name.startswith(self.server.XLOG_DB):
@@ -1072,13 +1072,13 @@ class BackupManager(RemoteStatusMixin, KeepManagerMixin):
                                 )
                                 continue
                             wal_info = comp_manager.get_wal_file_info(fullname)
-                            metadata.write_wal_infos([wal_info])
+                            wal_metadata.write_wal_infos([wal_info])
                 else:
                     # only history files are here
                     if xlog.is_history_file(fullname):
                         history_count += 1
                         wal_info = comp_manager.get_wal_file_info(fullname)
-                        metadata.write_wal_infos([wal_info])
+                        wal_metadata.write_wal_infos([wal_info])
                     else:
                         _logger.warning(
                             "unexpected file rebuilding the wal database: %s",
@@ -1161,8 +1161,8 @@ class BackupManager(RemoteStatusMixin, KeepManagerMixin):
         :return list: a list of removed WAL files
         """
         removed = []
-        with self.server.metadata() as metadata:
-            for wal_info in metadata.get_wal_infos():
+        with self.server.wal_metadata() as wal_metadata:
+            for wal_info in wal_metadata.get_wal_infos():
                 if not xlog.is_any_xlog_file(wal_info.name):
                     output.error(
                         "invalid WAL segment name %r\n"
@@ -1202,7 +1202,7 @@ class BackupManager(RemoteStatusMixin, KeepManagerMixin):
                 if not keep:
                     self.delete_wal(wal_info)
                     removed.append(wal_info.name)
-                    metadata.delete_wal_info(wal_info)
+                    wal_metadata.delete_wal_info(wal_info)
         return removed
 
     def validate_last_backup_maximum_age(self, last_backup_maximum_age):

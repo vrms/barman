@@ -19,7 +19,7 @@ import os
 
 import pytest
 from mock import ANY, MagicMock, patch
-from barman.storage.metadata import storage_metadata_factory
+from barman.storage.metadata import wal_metadata_factory
 
 import barman.xlog
 from barman.compression import PyGZipCompressor, identify_compression
@@ -321,14 +321,16 @@ class TestFileWalArchiver(object):
         basedir = tmpdir.join("main")
         incoming_dir = basedir.join("incoming")
         archive_dir = basedir.join("wals")
-        metadata = storage_metadata_factory(backup_manager.config.name, archive_dir)
+        metadata = wal_metadata_factory(backup_manager.config.name, archive_dir)
         # TODO xlog_db = archive_dir.join("xlog.db")
         wal_name = "000000010000000000000001"
         wal_file = incoming_dir.join(wal_name)
         wal_file.ensure()
         archive_dir.ensure(dir=True)
         # TODO xlog_db.ensure()
-        backup_manager.server.metadata.return_value.__enter__.return_value = metadata
+        backup_manager.server.wal_metadata.return_value.__enter__.return_value = (
+            metadata
+        )
         backup_manager.server.archivers = [FileWalArchiver(backup_manager)]
 
         backup_manager.archive_wal()
@@ -451,7 +453,7 @@ class TestFileWalArchiver(object):
         basedir = tmpdir.join("main")
         incoming_dir = basedir.join("incoming")
         archive_dir = basedir.join("wals")
-        storage_metadata = storage_metadata_factory(
+        storage_metadata = wal_metadata_factory(
             backup_manager.server.config.name,
             backup_manager.server.config.wals_directory,
         )
@@ -459,7 +461,7 @@ class TestFileWalArchiver(object):
         wal_file = incoming_dir.join(wal_name)
         wal_file.ensure()
         archive_dir.ensure(dir=True)
-        backup_manager.server.metadata.return_value.__enter__.return_value = (
+        backup_manager.server.wal_metadata.return_value.__enter__.return_value = (
             storage_metadata
         )
         backup_manager.server.archivers = [FileWalArchiver(backup_manager)]
@@ -507,7 +509,7 @@ class TestFileWalArchiver(object):
         basedir.mkdir("errors")
         archive_dir = basedir.join("wals")
         xlog_db = archive_dir.join("xlog.db")
-        storage_metadata = storage_metadata_factory(
+        storage_metadata = wal_metadata_factory(
             backup_manager.server.config.name,
             backup_manager.server.config.wals_directory,
         )
@@ -515,7 +517,7 @@ class TestFileWalArchiver(object):
         wal_file = incoming_dir.join(wal_name)
         wal_file.ensure()
         archive_dir.ensure(dir=True)
-        backup_manager.server.metadata.return_value.__enter__.return_value = (
+        backup_manager.server.wal_metadata.return_value.__enter__.return_value = (
             storage_metadata
         )
         backup_manager.server.archivers = [FileWalArchiver(backup_manager)]
@@ -562,7 +564,7 @@ class TestFileWalArchiver(object):
         incoming_dir = basedir.join("incoming")
         basedir.mkdir("errors")
         archive_dir = basedir.join("wals")
-        storage_metadata = storage_metadata_factory(
+        storage_metadata = wal_metadata_factory(
             backup_manager.server.config.name,
             backup_manager.server.config.wals_directory,
         )
@@ -570,7 +572,7 @@ class TestFileWalArchiver(object):
         wal_file = incoming_dir.join(wal_name)
         wal_file.ensure()
         archive_dir.ensure(dir=True)
-        backup_manager.server.metadata.return_value.__enter__.return_value = (
+        backup_manager.server.wal_metadata.return_value.__enter__.return_value = (
             storage_metadata
         )
         backup_manager.server.archivers = [FileWalArchiver(backup_manager)]

@@ -48,7 +48,6 @@ from barman.lockfile import (
 from barman.postgres import PostgreSQLConnection
 from barman.process import ProcessInfo
 from barman.server import CheckOutputStrategy, CheckStrategy, Server
-from barman.storage.metadata import storage_metadata_factory
 from testing_helpers import (
     build_config_from_dicts,
     build_real_server,
@@ -304,8 +303,8 @@ class TestServer(object):
         )
 
         # create a xlog.db and add those entries
-        with server.metadata() as metadata:
-            metadata.write_wal_infos(wal_info_files)
+        with server.wal_metadata() as wal_metadata:
+            wal_metadata.write_wal_infos(wal_info_files)
 
         wals = []
         for wal_file in server.get_required_xlog_files(backup, 2, 41):
@@ -377,8 +376,8 @@ class TestServer(object):
         )
 
         # create a xlog.db and add those entries
-        with server.metadata() as metadata:
-            metadata.write_wal_infos(wal_info_files)
+        with server.wal_metadata() as wal_metadata:
+            wal_metadata.write_wal_infos(wal_info_files)
 
         wals = []
         for wal_file in server.get_wal_until_next_backup(backup, include_history=True):
@@ -1034,8 +1033,8 @@ class TestServer(object):
         assert strategy.check_result[0].status is False
 
         # Write something in the xlog db file and check for the results
-        with server.metadata() as metadata:
-            metadata.write_wal_infos([WalFileInfo(name="000000000000000000000000")])
+        with server.wal_metadata() as wal_metadata:
+            wal_metadata.write_wal_infos([WalFileInfo(name="000000000000000000000000")])
         # The check strategy should contain no errors.
         strategy = CheckStrategy()
         server.check_archive(strategy)
@@ -1098,8 +1097,8 @@ class TestServer(object):
 
         # Create some content in the fake xlog.db to avoid triggering
         # empty xlogdb errors
-        with server.metadata() as metadata:
-            metadata.write_wal_infos([WalFileInfo(name="000000000000000000000000")])
+        with server.wal_metadata() as wal_metadata:
+            wal_metadata.write_wal_infos([WalFileInfo(name="000000000000000000000000")])
 
         # Utility function to generare fake WALs
         def write_wal(target_dir, wal_number, partial=False):

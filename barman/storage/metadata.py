@@ -14,11 +14,11 @@ from barman.utils import with_metaclass
 # move specific retrieval logic here.
 
 
-def storage_metadata_factory(server, path):
-    return StorageMetadataCsv(server, path)
+def wal_metadata_factory(server, path):
+    return WalMetadataCsv(server, path)
 
 
-class StorageMetadata(with_metaclass(ABCMeta)):
+class WalMetadata(with_metaclass(ABCMeta)):
     def __init__(self, server):
         self.server = server
 
@@ -31,9 +31,9 @@ class StorageMetadata(with_metaclass(ABCMeta)):
         """Write the WalFileInfo to metadata storage"""
 
 
-class StorageMetadataCsv(StorageMetadata):
+class WalMetadataCsv(WalMetadata):
     def __init__(self, server, path=""):
-        super(StorageMetadataCsv, self).__init__(server)
+        super(WalMetadataCsv, self).__init__(server)
         self.path = "%s/wal_metadata.csv" % path
         self.current_position = 0
 
@@ -136,9 +136,9 @@ class StorageMetadataCsv(StorageMetadata):
 
 """
 import barman
-from barman.storage.metadata import StorageMetadataCsv
+from barman.storage.metadata import WalMetadataCsv
 
-meta = StorageMetadataCsv(barman.__config__, "mt-primary", "/tmp/metadata.csv")
+meta = WalMetadataCsv(barman.__config__, "mt-primary", "/tmp/metadata.csv")
 wals = [wi for wi in meta.get_wal_infos()]
 wals[0].name = wals[0].name + "ohai"
 meta.write_wal_infos([wals[0]])

@@ -33,7 +33,7 @@ from barman.config import BackupOptions
 from barman.exceptions import CompressionIncompatibility, RecoveryInvalidTargetException
 from barman.infofile import BackupInfo, WalFileInfo
 from barman.retention_policies import RetentionPolicyFactory
-from barman.storage.metadata import storage_metadata_factory
+from barman.storage.metadata import wal_metadata_factory
 from testing_helpers import (
     build_backup_directories,
     build_backup_manager,
@@ -211,7 +211,7 @@ class TestBackup(object):
         wal_history_file04.write("2\t0/3000028\tunknown\n")
         wal_file = wal_dir.join("0000000100000000/000000010000000000000001")
         wal_file.ensure()
-        metadata = storage_metadata_factory(
+        metadata = wal_metadata_factory(
             backup_manager.server.config.name,
             backup_manager.server.config.wals_directory,
         )
@@ -234,7 +234,9 @@ class TestBackup(object):
                 ),
             ]
         )
-        backup_manager.server.metadata.return_value.__enter__.return_value = metadata
+        backup_manager.server.wal_metadata.return_value.__enter__.return_value = (
+            metadata
+        )
         backup_manager.server.config.basebackups_directory = base_dir.strpath
         backup_manager.server.config.wals_directory = wal_dir.strpath
         # The following tablespaces are defined in the default backup info
@@ -772,11 +774,11 @@ class TestWalCleanup(object):
         backup_manager.server.config.basebackups_directory = base_dir.strpath
         backup_manager.server.config.wals_directory = wal_dir.strpath
         backup_manager.server.config.minimum_redundancy = 1
-        self.metadata = storage_metadata_factory(
+        self.wal_metadata = wal_metadata_factory(
             backup_manager.server.config.name,
             backup_manager.server.config.wals_directory,
         )
-        self.metadata.write_wal_infos(
+        self.wal_metadata.write_wal_infos(
             [
                 WalFileInfo(
                     name="000000010000000000000001",
@@ -788,8 +790,8 @@ class TestWalCleanup(object):
         )
 
         # This must be a side-effect so we open xlog_db each time it is called
-        backup_manager.server.metadata.return_value.__enter__.return_value = (
-            self.metadata
+        backup_manager.server.wal_metadata.return_value.__enter__.return_value = (
+            self.wal_metadata
         )
 
         # Wire get_available_backups in our mock server to call
@@ -831,7 +833,7 @@ class TestWalCleanup(object):
         with open("%s/%s" % (wal_path, wal), "a"):
             # An empty file is fine for the purposes of these tests
             pass
-        self.metadata.write_wal_infos(
+        self.wal_metadata.write_wal_infos(
             [WalFileInfo(name=wal, size=42, time=43, compression=None)]
         )
 
@@ -984,7 +986,7 @@ class TestWalCleanup(object):
         with open("%s/%s" % (wals_directory, "00000001.history"), "a"):
             # An empty file is fine for the purposes of these tests
             pass
-        self.metadata.write_wal_infos(
+        self.wal_metadata.write_wal_infos(
             [WalFileInfo(name="00000001.history", size=42, time=43, compression=None)]
         )
 

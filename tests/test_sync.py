@@ -134,10 +134,10 @@ class TestSync(object):
             ),
         )
         # Access storage metadata without the contextmanager
-        metadata = server._metadata
+        wal_metadata = server._wal_metadata
 
         # build a test xlog.db
-        metadata.write_wal_infos(
+        wal_metadata.write_wal_infos(
             [
                 WalFileInfo(
                     name="000000010000000000000002",
@@ -163,28 +163,32 @@ class TestSync(object):
         # No last_position parameter, only last_wal.
         # Expect the method to set the read point to 0 (beginning of the file)
         result = server.set_sync_starting_point(
-            metadata, "000000010000000000000002", None
+            wal_metadata, "000000010000000000000002", None
         )
         assert result == 0
-        assert metadata.current_position == 0
+        assert wal_metadata.current_position == 0
 
         # last_position parameter and the correct last_wal
         # Expect the method to set the read point to the given last_position
-        result = server.set_sync_starting_point(metadata, "000000010000000000000003", 1)
+        result = server.set_sync_starting_point(
+            wal_metadata, "000000010000000000000003", 1
+        )
         assert result == 1
-        assert metadata.current_position == 1
+        assert wal_metadata.current_position == 1
 
         # No last_position and no last_wal.
         # Expect the method to set the read point to 0
-        result = server.set_sync_starting_point(metadata, None, None)
+        result = server.set_sync_starting_point(wal_metadata, None, None)
         assert result == 0
-        assert metadata.current_position == 0
+        assert wal_metadata.current_position == 0
 
         # Wrong combination of last_position and last_wal.
         # Expect the method to set the read point to 0
-        result = server.set_sync_starting_point(metadata, "000000010000000000000004", 1)
+        result = server.set_sync_starting_point(
+            wal_metadata, "000000010000000000000004", 1
+        )
         assert result == 0
-        assert metadata.current_position == 0
+        assert wal_metadata.current_position == 0
 
     def test_status(self, capsys, tmpdir):
         """
@@ -212,7 +216,7 @@ class TestSync(object):
         }
 
         # Access storage metadata without the contextmanager
-        metadata = server._metadata
+        wal_metadata = server._wal_metadata
 
         # Test with an empty storage metadata
         server.sync_status("000000010000000000000001")
@@ -222,7 +226,7 @@ class TestSync(object):
         assert result["last_name"] == ""
 
         # Write some WAL data for remainder of test
-        metadata.write_wal_infos(
+        wal_metadata.write_wal_infos(
             [
                 WalFileInfo(
                     name="000000010000000000000001",
@@ -657,8 +661,8 @@ class TestSync(object):
                 compression=None,
             ),
         ]
-        with server.metadata() as metadata:
-            for i, wal_info in enumerate(metadata.get_wal_infos()):
+        with server.wal_metadata() as wal_metadata:
+            for i, wal_info in enumerate(wal_metadata.get_wal_infos()):
                 assert wal_info.name == exp_xlog[i].name
                 assert wal_info.size == exp_xlog[i].size
                 assert wal_info.time == exp_xlog[i].time

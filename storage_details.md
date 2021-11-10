@@ -123,15 +123,18 @@ Then update the following to just interact with Metadata:
 
 ~* remove remaining xlogdb-isms (e.g. from_xlog_line etc)
 ~  - from_file? <-- it's ok, this creates WalFileInfo from an actual WAL file
-* re-implement so we're keeping the file open and holding seek positions
-  etc - we will need to do this for backward compatibility
-    - or can we ditch backward compatibility at this point?
 * rename metadata to xlog_metadata
   - also it is logically different to the backup metadata so it should
     just be a separate thing (it may happen to share the same backend
     like a SQLite or LevelDB or whatever, but code interacting with
     xlog metadata should not be using the same abstractions as code
     interacting with backup metadata)
+* re-implement so we're keeping the file open and holding seek positions
+  etc - we will need to do this for backward compatibility
+    - or can we ditch backward compatibility at this point?
+  - actually what we do here is fix the sync_status function
+    - what it actually needs to do is, for a given last_wal and last_position, return the current latest_wal and latest_position
+    - the details of this are entirely due to the storage implementation so we can move all of this inside storage metadata
 
 #### Better
 

@@ -90,7 +90,7 @@ from barman.utils import (
 )
 from barman.wal_archiver import FileWalArchiver, StreamingWalArchiver, WalArchiver
 
-from barman.storage.metadata import storage_metadata_factory
+from barman.storage.metadata import wal_metadata_factory
 
 PARTIAL_EXTENSION = ".partial"
 PRIMARY_INFO_FILE = "primary.info"
@@ -235,7 +235,7 @@ class Server(RemoteStatusMixin):
         """
         super(Server, self).__init__()
         self.config = config
-        self._metadata = storage_metadata_factory(
+        self._wal_metadata = wal_metadata_factory(
             self.config.name, self.config.wals_directory
         )
         self.path = self._build_path(self.config.path_prefix)
@@ -616,9 +616,7 @@ class Server(RemoteStatusMixin):
         # Make sure that WAL archiving has been setup
         # XLOG_DB needs to exist and its size must be > 0
         # NOTE: we do not need to acquire a lock in this phase
-        metadata = storage_metadata_factory(
-            self.config.name, self.config.wals_directory
-        )
+        metadata = wal_metadata_factory(self.config.name, self.config.wals_directory)
         xlogdb_empty = not metadata.has_content()
 
         # NOTE: This check needs to be only visible if it fails
@@ -1452,8 +1450,8 @@ class Server(RemoteStatusMixin):
         # of the backup
         if not target_tli:
             target_tli, _, _ = xlog.decode_segment_name(end)
-        with self.metadata() as metadata:
-            wal_infos = metadata.get_wal_infos()
+        with self.wal_metadata() as wal_metadata:
+            wal_infos = wal_metadata.get_wal_infos()
             for wal_info in wal_infos:
                 # Handle .history files: add all of them to the output,
                 # regardless of their age
@@ -1491,8 +1489,8 @@ class Server(RemoteStatusMixin):
             next_end = self.get_next_backup(backup.backup_id).end_wal
         backup_tli, _, _ = xlog.decode_segment_name(begin)
 
-        with self.metadata() as metadata:
-            wal_infos = metadata.get_wal_infos()
+        with self.wal_metadata() as wal_metadata:
+            wal_infos = wal_metadata.get_wal_infos()
             for wal_info in wal_infos:
                 # Handle .history files: add all of them to the output,
                 # regardless of their age, if requested (the 'include_history'
@@ -2487,9 +2485,9 @@ class Server(RemoteStatusMixin):
         return os.path.join(self.config.wals_directory, self.XLOG_DB)
 
     @contextmanager
-    def metadata(self):
+    def wal_metadata(self):
         with ServerXLOGDBLock(self.config.barman_lock_directory, self.config.name):
-            yield self._metadata
+            yield self._wal_metadata
 
     @contextmanager
     def xlogdb(self, mode="r"):
@@ -2948,15 +2946,15 @@ class Server(RemoteStatusMixin):
         if backups:
             first_useful_wal = backups[sorted(backups.keys())[0]].begin_wal
         # Read xlogdb file.
-        with self.metadata() as metadata:
+        with self.wal_metadata() as wal_metadata:
             starting_point = self.set_sync_starting_point(
-                metadata, last_wal, last_position
+                wal_metadata, last_wal, last_position
             )
             check_first_wal = starting_point == 0 and last_wal is not None
             # The wal_info and line variables are used after the loop.
             # We initialize them here to avoid errors with an empty xlogdb.
             wal_info = None
-            for wal_info in metadata.get_wal_infos(last_position):
+            for wal_info in wal_metadata.get_wal_infos(last_position):
                 # Check if user is requesting data that is not available.
                 # TODO: probably the check should be something like
                 # TODO: last_wal + 1 < wal_info.name
@@ -2988,7 +2986,7 @@ class Server(RemoteStatusMixin):
                 # TODO this is not good and needs re-thinking - likely move all
                 # this logic into the xlog metadata class so nothing outside has
                 # to care?
-                sync_status["last_position"] = metadata.current_position
+                sync_status["last_position"] = wal_metadata.current_position
                 # Set the name of the last wal of the file
                 sync_status["last_name"] = wal_info.name
             else:
@@ -3694,8 +3692,8 @@ class Server(RemoteStatusMixin):
 
                     # If everything is synced without errors,
                     # update xlog.db using the list of WalFileInfo object
-                    with self.metadata() as metadata:
-                        metadata.write_wal_infos(local_wals)
+                    with self.wal_metadata() as wal_metadata:
+                        wal_metadata.write_wal_infos(local_wals)
                     # We need to update the sync-wals.info file with the latest
                     # synchronised WAL and the latest read position.
                     self.write_sync_wals_info_file(primary_info)
