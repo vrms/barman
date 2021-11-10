@@ -34,7 +34,7 @@ class StorageMetadata(with_metaclass(ABCMeta)):
 class StorageMetadataCsv(StorageMetadata):
     def __init__(self, server, path=""):
         super(StorageMetadataCsv, self).__init__(server)
-        self.path = "%s/metadata.csv" % path
+        self.path = "%s/wal_metadata.csv" % path
         self.current_position = 0
 
     def get_wal_info_at(self, last_position=0):
@@ -62,31 +62,28 @@ class StorageMetadataCsv(StorageMetadata):
                     if self.current_position < last_position:
                         self.current_position += 1
                         continue
-                    tokens = line.split("\t")
 
-                    record_type = tokens[0]
-                    if record_type == "WAL":
-                        # TODO: this is just WalFileInfo.from_xlogdb_line
+                    # TODO: this is just WalFileInfo.from_xlogdb_line
+                    try:
+                        name, size, time, compression = line.split("\t")
+                    except ValueError:
+                        # Old format compatibility (no compression)
+                        compression = None
                         try:
-                            _, name, size, time, compression = line.split()
+                            name, size, time = line.split()
                         except ValueError:
-                            # Old format compatibility (no compression)
-                            compression = None
-                            try:
-                                name, size, time = line.split()
-                            except ValueError:
-                                raise ValueError("cannot parse line: %r" % (line,))
-                        # The to_xlogdb_line method writes None values as literal 'None'
-                        if compression == "None":
-                            compression = None
-                        size = int(size)
-                        time = float(time)
-                        yield WalFileInfo(
-                            name=name,
-                            size=size,
-                            time=time,
-                            compression=compression,
-                        )
+                            raise ValueError("cannot parse line: %r" % (line,))
+                    # The to_xlogdb_line method writes None values as literal 'None'
+                    if compression == "None":
+                        compression = None
+                    size = int(size)
+                    time = float(time)
+                    yield WalFileInfo(
+                        name=name,
+                        size=size,
+                        time=time,
+                        compression=compression,
+                    )
                     self.current_position += 1
         except FileNotFoundError:
             return
@@ -94,7 +91,7 @@ class StorageMetadataCsv(StorageMetadata):
     def _write_wal_info(self, wal_info):
         with open(self.path, "a+") as db:
             db.write(
-                "WAL\t%s\t%s\t%s\t%s\n"
+                "%s\t%s\t%s\t%s\n"
                 % (
                     wal_info.name,
                     wal_info.size,
@@ -132,7 +129,7 @@ class StorageMetadataCsv(StorageMetadata):
                 old.truncate()
 
     def truncate(self):
-        with open(self.path("w")) as db:
+        with open(self.path, "w") as db:
             db.seek(0)
             db.truncate()
 
