@@ -129,7 +129,12 @@ class StorageMetadataCsv(StorageMetadata):
                 new.seek(0)
                 old.seek(0)
                 shutil.copyfileobj(new, old)
-                new.truncate()
+                old.truncate()
+
+    def truncate(self):
+        with open(self.path("w")) as db:
+            db.seek(0)
+            db.truncate()
 
 
 """
